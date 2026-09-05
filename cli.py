@@ -7,7 +7,7 @@ import json
 import sys
 from agents.models import SystemTaskPayload
 from agents.supervisor import SystemSupervisor
-from agents.base import AuditLogger
+from agents.base import AuditLogger, validate_identifier, validate_file_path, ValidationException
 
 supervisor = SystemSupervisor(model_provider="mock")
 
@@ -45,6 +45,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.command == "audit":
+        # Validate identifiers before processing
+        args.task_id = validate_identifier(args.task_id, "task_id")
+        args.target = validate_identifier(args.target, "target")
+        args.status = validate_identifier(args.status, "status")
         payload = SystemTaskPayload(
             task_id=args.task_id,
             target_identifier=args.target,
@@ -80,7 +84,10 @@ def main(argv=None):
         return 0
 
     if args.command == "batch":
-        with open(args.input, mode="r", encoding="utf-8-sig") as f:
+        # Validate file paths to prevent path traversal
+        input_path = validate_file_path(args.input, must_exist=True)
+        output_path = validate_file_path(args.output, must_exist=False)
+        with open(input_path, mode="r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             fieldnames = list(reader.fieldnames or [])
             rows = list(reader)
@@ -104,11 +111,11 @@ def main(argv=None):
             row_dict["audit_hash"] = dossier.audit_hash
             out_rows.append(row_dict)
 
-        with open(args.output, mode="w", encoding="utf-8", newline="") as f:
+        with open(output_path, mode="w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=out_fields)
             writer.writeheader()
             writer.writerows(out_rows)
-        print(f"Processed {len(out_rows)} records -> {args.output}")
+        print(f"Processed {len(out_rows)} records -> {output_path}")
         return 0
 
     if args.command == "serve":

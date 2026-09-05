@@ -54,10 +54,74 @@ class PHIGuard:
         return res
 
 
+# Allowed pattern for identifiers: alphanumeric, hyphens, underscores, dots
+IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,127}$")
+MAX_IDENTIFIER_LENGTH = 128
+
+
+class ValidationException(Exception):
+    """Raised when input fails structural validation."""
+    pass
+
+
+def validate_identifier(value: str, field_name: str = "identifier") -> str:
+    """Validate that an identifier is safe for processing and logging.
+
+    Prevents injection via control characters, path traversal sequences,
+    and excessively long inputs.
+    """
+    if not isinstance(value, str):
+        raise ValidationException(f"{field_name} must be a string, got {type(value).__name__}")
+    if not value:
+        raise ValidationException(f"{field_name} cannot be empty")
+    if len(value) > MAX_IDENTIFIER_LENGTH:
+        raise ValidationException(f"{field_name} exceeds maximum length of {MAX_IDENTIFIER_LENGTH}")
+    # Reject control characters and newlines (log injection / header injection)
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValidationException(f"{field_name} contains control characters")
+    if not IDENTIFIER_PATTERN.match(value):
+        raise ValidationException(
+            f"{field_name} contains invalid characters. "
+            "Only alphanumeric, hyphens, underscores, and dots are allowed."
+        )
+    return value
+
+
+def validate_file_path(file_path: str, must_exist: bool = False) -> str:
+    """Validate file path for safe filesystem operations.
+
+    Prevents path traversal attacks and ensures the path stays within
+    expected boundaries.
+    """
+    if not isinstance(file_path, str):
+        raise ValidationException("File path must be a string")
+    if not file_path:
+        raise ValidationException("File path cannot be empty")
+    # Reject path traversal sequences
+    if ".." in file_path or "~" in file_path:
+        raise ValidationException("Path traversal sequences not allowed in file path")
+    # Reject null bytes
+    if "\x00" in file_path:
+        raise ValidationException("Null bytes not allowed in file path")
+    # Resolve to absolute path for consistency
+    resolved = os.path.abspath(file_path)
+    if must_exist and not os.path.isfile(resolved):
+        raise ValidationException(f"File not found: {file_path}")
+    return resolved
+
+
 class AuditTrail:
     """Cryptographic Tamper-Evident HMAC-SHA256 Audit Trail."""
     def __init__(self, secret_key: Optional[str] = None):
-        self.secret_key = (secret_key or os.getenv("AUDIT_SECRET_KEY", "mass-spec-proteomics-fdr-agent-master-audit-key-2026")).encode("utf-8")
+        resolved_key = secret_key or os.getenv("AUDIT_SECRET_KEY")
+        if not resolved_key:
+            raise SecurityException(
+                "AUDIT_SECRET_KEY environment variable must be set. "
+                "Do not use hardcoded defaults in production."
+            )
+        if len(resolved_key) < 16:
+            raise SecurityException("AUDIT_SECRET_KEY must be at least 16 characters long.")
+        self.secret_key = resolved_key.encode("utf-8")
         self.logs: List[Dict[str, Any]] = []
 
     def log(self, actor: str, actor_tier: str, event_type: str, details: Dict[str, Any]) -> Dict[str, Any]:
