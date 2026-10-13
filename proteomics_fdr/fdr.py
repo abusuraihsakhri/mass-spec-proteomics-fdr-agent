@@ -6,6 +6,7 @@ to win. This module does not perform database search, spectrum competition,
 peptide/protein inference, or calibration of decoy quality.
 """
 import math
+import re
 from collections.abc import Iterable, Mapping
 
 
@@ -40,8 +41,9 @@ def analyze_psms(rows: Iterable[Mapping], alpha: float = 0.01) -> dict:
         if not isinstance(row, Mapping):
             raise ValueError(f"Row {index} must be a mapping")
         identifier = row.get("psm_id")
-        if not isinstance(identifier, str) or not identifier.strip() or len(identifier) > 256:
-            raise ValueError(f"Row {index}: psm_id must be a nonempty string (max 256)")
+        if (not isinstance(identifier, str) or len(identifier) > 256
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", identifier)):
+            raise ValueError(f"Row {index}: psm_id must start with a letter or number and contain only letters, digits, . _ : - (max 256)")
         if identifier in seen:
             raise ValueError(f"Row {index}: duplicate psm_id {identifier!r}; supply one winning hit per spectrum")
         seen.add(identifier)
