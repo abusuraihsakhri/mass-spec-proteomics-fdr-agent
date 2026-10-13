@@ -87,6 +87,20 @@ def validate_identifier(value: str, field_name: str = "identifier") -> str:
     return value
 
 
+
+
+def parse_flag(value: Any, field_name: str = "is_critical_flag") -> bool:
+    """Parse CSV boolean values explicitly (bool("False") is True)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        label = value.strip().lower()
+        if label in ("true", "1", "yes"):
+            return True
+        if label in ("false", "0", "no", ""):
+            return False
+    raise ValidationException(f"{field_name} must be true/false, 1/0, or yes/no")
+
 def validate_file_path(file_path: str, must_exist: bool = False) -> str:
     """Validate file path for safe filesystem operations.
 
@@ -131,8 +145,11 @@ class AuditTrail:
         audit_id = f"AUDIT-{int(time.time()*1000)}-{len(self.logs)+1}"
         ts = datetime.now(timezone.utc).isoformat()
         prev_hash = self.logs[-1]["current_hash"] if self.logs else "GENESIS_BLOCK_0000000000000000"
-        sign_string = f"{audit_id}|{ts}|{actor}|{actor_tier}|{event_type}|{payload_hash}|{prev_hash}"
-        signature = hmac.new(self.secret_key, sign_string.encode("utf-8"), hashlib.sha256).hexdigest()
+        signed_fields = dict(audit_id=audit_id, timestamp=ts, actor=actor,
+                             actor_tier=actor_tier, event_type=event_type,
+                             payload_hash=payload_hash, prev_hash=prev_hash)
+        canonical = json.dumps(signed_fields, sort_keys=True, separators=(",", ":"))
+        signature = hmac.new(self.secret_key, canonical.encode("utf-8"), hashlib.sha256).hexdigest()
         entry = {
             "audit_id": audit_id,
             "timestamp": ts,
@@ -147,14 +164,27 @@ class AuditTrail:
         return entry
 
     def verify_integrity(self) -> bool:
-        for i, entry in enumerate(self.logs):
-            prev = self.logs[i-1]["current_hash"] if i > 0 else "GENESIS_BLOCK_0000000000000000"
-            if entry["prev_hash"] != prev:
+        """Verify HMAC signatures and links for every in-memory audit entry."""
+        prev = "GENESIS_BLOCK_0000000000000000"
+        for entry in self.logs:
+            try:
+                if entry["prev_hash"] != prev:
+                    return False
+                fields = ("audit_id", "timestamp", "actor", "actor_tier",
+                          "event_type", "payload_hash", "prev_hash")
+                canonical = json.dumps({field: entry[field] for field in fields},
+                                       sort_keys=True, separators=(",", ":"))
+                expected = hmac.new(self.secret_key, canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+                if not hmac.compare_digest(expected, entry["current_hash"]):
+                    return False
+                prev = entry["current_hash"]
+            except (KeyError, TypeError, ValueError):
                 return False
         return True
 
     def get_trail(self) -> List[Dict[str, Any]]:
-        return self.logs
+        """Return copies to prevent callers from mutating the active chain."""
+        return [entry.copy() for entry in self.logs]
 
 
 GLOBAL_AUDIT = AuditTrail()

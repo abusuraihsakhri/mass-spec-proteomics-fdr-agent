@@ -1,8 +1,10 @@
 """
 FastAPI REST API Server for Mass Spec Proteomics Fdr Agent.
 """
-from typing import Dict, Any, List
-from fastapi import FastAPI, HTTPException
+import hmac
+import os
+from typing import Dict, Any, List, Optional
+from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 from .base import AuditLogger, PHIGuard
 from .models import SystemTaskPayload, ConsensusDossier
@@ -51,5 +53,9 @@ def api_chat(req: ChatRequest):
 
 
 @app.get("/api/audit/logs")
-def api_audit_logs():
+def api_audit_logs(x_audit_token: Optional[str] = Header(default=None)):
+    """Audit metadata is sensitive: never expose it to anonymous clients."""
+    expected = os.environ.get("AUDIT_LOG_READ_TOKEN")
+    if not expected or len(expected) < 16 or not x_audit_token or not hmac.compare_digest(expected, x_audit_token):
+        raise HTTPException(status_code=403, detail="Audit log access requires configured authentication")
     return {"audit_trail": AuditLogger.get_trail(), "verified": AuditLogger.verify_integrity()}

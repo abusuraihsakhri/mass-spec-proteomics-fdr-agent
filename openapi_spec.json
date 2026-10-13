@@ -1,43 +1,45 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Mass Spec Proteomics Fdr Engine API",
-    "description": "Enterprise Distributed Component Platform (Clinical & Cryptographic AI) adhering to CAP / CLSI / NIST Standards.",
-    "version": "3.0.0-ENTERPRISE",
-    "contact": {
-      "name": "Dr. Abu Suraih Sakhri",
-      "url": "https://github.com/abusuraihsakhri"
-    }
+    "title": "Mass Spec Proteomics FDR Agent — Legacy Alert API",
+    "description": "Rule-based threshold and status flag evaluation; not PSM FDR analysis. Live OpenAPI schema is served at /openapi.json.",
+    "version": "3.0.0-ENTERPRISE"
   },
   "paths": {
     "/health": {
       "get": {
-        "summary": "Health and metadata check",
+        "summary": "Service health",
         "responses": {
           "200": {
-            "description": "System optimal"
+            "description": "JSON status"
           }
         }
       }
     },
     "/metrics": {
       "get": {
-        "summary": "Prometheus operational metrics",
+        "summary": "JSON task and audit counters",
         "responses": {
           "200": {
-            "description": "Prometheus text metrics"
+            "description": "JSON metrics"
           }
         }
       }
     },
     "/api/audit": {
       "post": {
-        "summary": "Dispatch task payload across specialized workers",
+        "summary": "Evaluate legacy rule-based task",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "task_id",
+                  "target_identifier",
+                  "primary_metric"
+                ],
                 "properties": {
                   "task_id": {
                     "type": "string"
@@ -56,57 +58,73 @@
                   },
                   "is_critical_flag": {
                     "type": "boolean"
+                  },
+                  "attributes": {
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "task_id",
-                  "target_identifier",
-                  "primary_metric"
-                ]
+                }
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Consensus dossier with HMAC signature"
+            "description": "Rule-based dossier with HMAC-linked audit metadata"
+          },
+          "422": {
+            "description": "Invalid payload"
           }
         }
       }
     },
     "/api/chat": {
       "post": {
-        "summary": "Air-gapped supervisory conversational assistant",
+        "summary": "Deterministic mock supervisory response",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "query"
+                ],
                 "properties": {
                   "query": {
                     "type": "string"
                   }
-                },
-                "required": [
-                  "query"
-                ]
+                }
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Supervisory response"
+            "description": "Mock status response"
           }
         }
       }
     },
     "/api/audit/logs": {
       "get": {
-        "summary": "Retrieve and cryptographically verify HMAC audit trail",
+        "summary": "Read signed audit metadata",
+        "parameters": [
+          {
+            "name": "X-Audit-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Token configured with AUDIT_LOG_READ_TOKEN; access disabled if not configured"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Cryptographic audit trail"
+            "description": "Audit metadata and signature verification result"
+          },
+          "403": {
+            "description": "Access denied"
           }
         }
       }
