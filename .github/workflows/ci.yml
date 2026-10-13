@@ -30,6 +30,8 @@ jobs:
         run: python -m pytest -q
       - name: Verify web JavaScript syntax
         run: node --check web/app.js
+      - name: Test browser algorithm
+        run: node --test tests/test_web_fdr.cjs
       - name: Check audit verifier
         run: |
           python -c "from agents.base import AuditLogger; assert AuditLogger.verify_integrity()"
