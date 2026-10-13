@@ -1,197 +1,89 @@
 # Mass Spec Proteomics FDR Agent
 
-> **Domain:** Clinical Decision Support & Biomedical Computing
-> **Reference Guidelines & Standards:** CAP / CLSI / ISO Standards, HUPO-PSI Proteomics Standards
+PSM-level target–decoy false discovery rate (FDR) analysis with a standalone browser calculator, Python CLI and optional REST API. The repository also retains its existing **separate**, rule-based alerting and orchestration pipelines.
 
-<div align="center">
+## Browser calculator
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
-![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
-![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
+Open `web/index.html` in a modern browser, load a CSV (or use the synthetic example), choose an FDR threshold, calculate q-values, and download the annotated CSV. All computation runs locally in JavaScript; uploaded files are **not transmitted** to a server. Works without Python, a backend, or external dependencies.
 
-</div>
+Input requires one **already-competed winning PSM per spectrum**, with columns:
 
----
+```csv
+psm_id,score,is_decoy
+scan1,21.4,false
+scan2,18.2,false
+scan3,15.1,true
+```
 
-## 📖 What It Does
+- `psm_id`: unique identifier, starting with a letter/digit; remaining characters may include `._:-`
+- `score`: finite number, with **higher = better** (reverse lower-is-better scores before use)
+- `is_decoy`: `true`/`false`, `1`/`0`, `yes`/`no`, or `decoy`/`target`
 
-Mass Spec Proteomics FDR Agent is a multi-agent evaluation platform for clinical and proteomics data analysis. It processes task payloads through specialized worker agents that evaluate metrics against reference thresholds, generating consensus dossiers with cryptographic audit trails.
+### Statistical method and scope
 
-The system provides two parallel evaluation pipelines:
+For score cutoffs, the calculator uses the conservative target–decoy competition estimator **TDC+**:
 
-1. **Clinical/Biomedical Pipeline** (`agents/`): Evaluates task payloads using InvariantQCWorker, SafetyEscalationWorker, and ProtocolConformanceWorker
-2. **Proteomics Pipeline** (`proteomics_fdr/`): Target-Decoy search and Peptide-Spectrum Match (PSM) evaluation using HUPO-PSI Proteomics Standards
+```text
+estimated FDR = min(1, (cumulative decoy wins + 1) / cumulative target wins)
+q-value(score) = minimum estimated FDR over cutoffs at or below this score
+```
 
----
+All PSMs sharing a score are processed as one tie group. A PSM is accepted only if it is a **target** winner with q-value ≤ the selected threshold (default 0.01, i.e. 1%). A lack of observed decoys never automatically implies zero FDR.
 
-## ⚙️ Key Capabilities & Algorithmic Modules
+**Assumptions:** each spectrum contributes one pre-competed target/decoy winning match, the decoy search fairly models incorrect targets, target/decoy search spaces are comparable, and scoring direction is correct. This software does not search raw spectra, construct decoys, perform target/decoy competition, rescore PSMs, or control peptide-, protein-, or site-level FDR. No clinical claims or regulatory validation are made. Do not use it as a clinical decision tool.
 
-- **Multi-Agent Evaluation**: Distributed worker architecture for parallel metric assessment
-- **Consensus Dossier Generation**: Aggregated urgency classification from multiple workers
-- **Zero-PHI Outbound Interceptor**: AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers
-- **Tamper-Evident HMAC-SHA256 Audit Trail**: Chained, cryptographically signed logs for every evaluation
-- **Input Validation**: Structural validation of identifiers and file paths to prevent injection attacks
-- **Path Traversal Protection**: Secure file path validation for batch operations
-- **FastAPI REST API**: OpenAPI 3.1 endpoints with Prometheus telemetry (`/metrics`)
-- **Batch Processing**: CSV-based high-throughput task evaluation
+## Python installation and CLI
 
----
-
-## 💻 Installation
+Requires Python ≥ 3.9.
 
 ```bash
-# Clone the repository
 git clone https://github.com/abusuraihsakhri/mass-spec-proteomics-fdr-agent.git
 cd mass-spec-proteomics-fdr-agent
-
-# Install dependencies
-pip install fastapi uvicorn pydantic pytest
-
-# Set required environment variable for audit trail
-export AUDIT_SECRET_KEY="your-secure-minimum-16-char-key-here"
+python -m pip install -e ".[test]"
+python -m pytest -q
 ```
 
----
+Compute PSM q-values (independent of any audit-signing key):
 
-## 💻 CLI Quickstart & Usage
-
-### 1. Single Task Evaluation
 ```bash
-python cli.py audit --task-id TASK-001 --target TARGET-01 --primary 28.5 --secondary 14.2 --critical --status DISCORDANT
+python -m proteomics_fdr fdr -i psms.csv -o annotated_psms.csv --alpha 0.01
 ```
 
-### 2. Supervisory Chat
-```bash
-python cli.py chat "What is the system status?"
-```
+Output columns are `psm_id,score,is_decoy,q_value,accepted`. For programmatic use, import `analyze_psms` from `proteomics_fdr.fdr`.
 
-### 3. Batch Processing
+### Separate legacy alerting workflows
+
+The original clinical-like `agents/` and proteomics `proteomics_fdr/agents.py` routines assess arbitrary primary/secondary thresholds and descriptor flags. Their outputs are **alerts, not statistically derived target–decoy FDR or laboratory interpretations**.
+
+They require a nondefault HMAC signing key:
+
 ```bash
+export AUDIT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+python cli.py audit --task-id TASK-001 --target TARGET-01 --primary 28.5 --secondary 14.2
 python cli.py batch -i sample.csv -o results.csv
-```
-
-### 4. Verify Audit Trail
-```bash
 python cli.py verify-audit
-```
-
-### 5. Launch REST API Server
-```bash
 python cli.py serve --host 127.0.0.1 --port 8000
 ```
 
-### Parameter Reference
-| Parameter | Type | Default | Description |
-|:----------|:-----|:--------|:------------|
-| `--task-id` | str | TASK-2026-001 | Unique task/case identifier |
-| `--target` | str | KEY-TARGET-01 | Target entity identifier |
-| `--primary` | float | 28.5 | Primary measurement value |
-| `--secondary` | float | 14.2 | Secondary metric value |
-| `--critical` | flag | False | Emergency escalation flag |
-| `--status` | str | DISCORDANT | Status/phenotype descriptor |
+The legacy FastAPI application has `/health`, `/metrics`, `/api/audit`, `/api/chat`, and `/api/audit/logs`. The other FastAPI application, launched with `python -m proteomics_fdr serve`, offers `POST /api/fdr` for `{"psms":[...], "alpha":0.01}` plus the original alert endpoints. For local API deployments, install requirements using the commands above.
 
-### Input Data Schema (CSV Batch)
+Audit events are signed with HMAC-SHA256 and linked in memory. Signature verification detects modification of stored signed entries, but the ledger is **not durable**: restarting the process loses it, and an attacker with the signing key can forge entries. The PHI regex filter is limited and **does not establish HIPAA compliance or comprehensive de-identification**. Do not submit protected clinical information to this utility.
 
-| Field | Type | Description |
-|:------|:-----|:------------|
-| `task_id` | str | Unique task identifier |
-| `target_identifier` | str | Target entity identifier |
-| `primary_metric` | float | Primary measurement value |
-| `secondary_metric` | float | Secondary metric value |
-| `is_critical_flag` | bool | Emergency escalation flag |
-| `status_descriptor` | str | Status code descriptor |
-
----
-
-## 🛡️ Security Architecture
-
-* **Zero-PHI Outbound Interceptor:** Active regex inspection blocking SSNs, MRNs, phone numbers, emails, DOBs, and patient names.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition. Requires `AUDIT_SECRET_KEY` environment variable (minimum 16 characters).
-* **Input Validation:** All identifiers validated against injection (control characters, path traversal, special characters).
-* **Path Traversal Protection:** File paths validated to prevent directory traversal attacks (`..`, `~`, null bytes).
-
-### Required Environment Variables
-| Variable | Required | Description |
-|:---------|:---------|:------------|
-| `AUDIT_SECRET_KEY` | Yes | HMAC-SHA256 signing key (min 16 chars) |
-| `MODEL_PROVIDER` | No | LLM provider: `mock`, `ollama`, `claude`, `openai` (default: mock) |
-
----
-
-## 🧪 Testing & Verification
-
-Run the automated test suite:
+## Docker
 
 ```bash
-pytest -v
+export AUDIT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+docker compose up --build
 ```
 
-Execute high-throughput batch simulation benchmarks:
+Docker serves the legacy FastAPI app on port 8000. Never commit signing keys or `.env` files. The browser calculator can also be hosted as static files from `web/`; GitHub Pages deployment uses `.github/workflows/pages.yml`.
 
-```bash
-python simulator.py 1000
-```
+## Development and checks
 
----
+Run `python -m pytest -q` and `node --check web/app.js`. CI covers Python 3.10–3.12 and performs an audit verifier check. The Python FDR calculation uses only the standard library; the older orchestration package depends on Pydantic, FastAPI and Uvicorn.
 
-## 🐳 Container Deployment
+The browser calculator uses native JavaScript, File API and Blob downloads; no Pyodide/WASM runtime is required. Compatible with modern desktop/mobile browsers implementing these APIs. Max browser input is 5 MB / 50,000 PSMs (Python CLI cap: 1,000,000).
 
-```bash
-docker build -t mass-spec-proteomics-fdr-agent .
-docker run -p 8000:8000 -e AUDIT_SECRET_KEY="your-production-key-here" mass-spec-proteomics-fdr-agent
-```
+## License
 
-Or using Docker Compose:
-
-```bash
-docker-compose up -d
-```
-
----
-
-## 📁 Project Structure
-
-```
-mass-spec-proteomics-fdr-agent/
-├── agents/                    # Clinical/Biomedical evaluation pipeline
-│   ├── __init__.py
-│   ├── api.py                 # FastAPI REST server
-│   ├── base.py                # Security, PHI guard, audit trail
-│   ├── learning.py            # Bayesian calibration engine
-│   ├── llm_factory.py         # LLM provider factory
-│   ├── metrics.py             # Prometheus metrics collector
-│   ├── models.py              # Pydantic data models
-│   ├── streamer.py            # WebSocket telemetry
-│   ├── supervisor.py          # Multi-agent orchestrator
-│   └── workers.py             # Specialized evaluation workers
-├── proteomics_fdr/            # Proteomics FDR evaluation pipeline
-│   ├── __init__.py
-│   ├── __main__.py           # Module entry point
-│   ├── agents.py             # Sub-agent implementations
-│   ├── cli.py                # CLI for proteomics pipeline
-│   ├── engine.py             # Core algorithmic engine
-│   ├── models.py             # Data models
-│   └── server.py             # FastAPI server factory
-├── tests/                     # Pytest test suite
-│   ├── conftest.py           # Test configuration
-│   ├── test_enrichment.py
-│   ├── test_mass_spec_proteomics_fdr_agent.py
-│   ├── test_proteomics_fdr.py
-│   └── test_security.py      # Security-focused tests
-├── web/                       # Operations console UI
-├── cli.py                     # Top-level CLI entry point
-├── enrichment.py              # Domain enrichment features
-├── simulator.py               # High-throughput stress tester
-├── pyproject.toml             # Project metadata
-├── Dockerfile
-└── docker-compose.yml
-```
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).
