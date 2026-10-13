@@ -51,6 +51,10 @@ def analyze_psms(rows: Iterable[Mapping], alpha: float = 0.01) -> dict:
             value = row["score"]
             if isinstance(value, bool):
                 raise ValueError
+            if isinstance(value, str) and not re.fullmatch(
+                    r"[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?",
+                    value.strip()):
+                raise ValueError
             score = float(value)
         except (KeyError, ValueError, TypeError):
             raise ValueError(f"Row {index}: score must be a finite number") from None
