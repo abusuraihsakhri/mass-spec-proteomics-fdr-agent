@@ -4,18 +4,19 @@ FastAPI REST API Server for ProteoFDR: Target-Decoy Search & Peptide-Spectrum Ma
 from typing import Dict, Any
 from .models import FrontierPayload
 from .agents import ProteomicsFDRCoordinator
+from .fdr import analyze_psms
 
 coordinator = ProteomicsFDRCoordinator()
 
 
 def create_app():
     try:
-        from fastapi import FastAPI
+        from fastapi import FastAPI, HTTPException
         from pydantic import BaseModel
 
         app = FastAPI(
             title="ProteoFDR: Target-Decoy Search & Peptide-Spectrum Match (PSM) Agent",
-            description="Calculates false discovery rates (FDR < 1%) from reversed decoy database searches using dynamic score thresholds.",
+            description="PSM target-decoy q-value calculation and legacy parameter-alert orchestration.",
             version="2.0.0-FRONTIER",
         )
 
@@ -51,6 +52,19 @@ def create_app():
         @app.post("/api/chat")
         def api_chat(req: ChatRequest):
             return {"response": coordinator.query_supervisory_chat(req.query)}
+
+        @app.post("/api/fdr")
+        def api_fdr(payload: Dict[str, Any]):
+            """Requires already-competed PSM winner rows."""
+            try:
+                psms = payload.get("psms")
+                if not isinstance(psms, list):
+                    raise ValueError("psms must be a list")
+                if len(psms) > 50000:
+                    raise HTTPException(status_code=413, detail="Maximum 50,000 PSMs")
+                return analyze_psms(psms, alpha=payload.get("alpha", 0.01))
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         return app
     except ImportError:
