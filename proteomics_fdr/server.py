@@ -12,7 +12,7 @@ coordinator = ProteomicsFDRCoordinator()
 def create_app():
     try:
         from fastapi import FastAPI, HTTPException
-        from pydantic import BaseModel
+        from pydantic import BaseModel, FiniteFloat
 
         app = FastAPI(
             title="ProteoFDR: Target-Decoy Search & Peptide-Spectrum Match (PSM) Agent",
@@ -23,8 +23,8 @@ def create_app():
         class TaskRequest(BaseModel):
             task_id: str = "TASK-2026-001"
             target_identifier: str = "TARGET-BIO-KEY"
-            primary_metric: float = 28.5
-            secondary_metric: float = 14.2
+            primary_metric: FiniteFloat = 28.5
+            secondary_metric: FiniteFloat = 14.2
             status_descriptor: str = "DISCORDANT_ANOMALY"
             is_critical_flag: bool = True
             attributes: Dict[str, Any] = {}
