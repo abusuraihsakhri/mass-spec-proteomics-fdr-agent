@@ -69,6 +69,8 @@ The legacy FastAPI application has `/health`, `/metrics`, `/api/audit`, `/api/ch
 
 Audit events are signed with HMAC-SHA256 and linked in memory. Signature verification detects modification of stored signed entries, but the ledger is **not durable**: restarting the process loses it, and an attacker with the signing key can forge entries. The PHI regex filter is limited and **does not establish HIPAA compliance or comprehensive de-identification**. Do not submit protected clinical information to this utility.
 
+Audit-log inspection is disabled unless `AUDIT_LOG_READ_TOKEN` (at least 16 characters) is configured, and callers supply the same value through an `X-Audit-Token` request header. This token must remain server-side. The other legacy API endpoints are unauthenticated; deploy the service only behind appropriate network or gateway controls.
+
 ## Docker
 
 ```bash
