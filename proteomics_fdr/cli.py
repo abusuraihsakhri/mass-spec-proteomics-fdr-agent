@@ -7,7 +7,7 @@ import json
 import sys
 from .models import FrontierPayload
 from .agents import ProteomicsFDRCoordinator
-from agents.base import validate_identifier, validate_file_path
+from .fdr import analyze_psms
 
 coordinator = ProteomicsFDRCoordinator()
 
@@ -39,7 +39,41 @@ def main(argv=None):
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8000)
 
+    p_fdr = subparsers.add_parser("fdr", help="Compute PSM-level target-decoy q-values from competed winners")
+    p_fdr.add_argument("-i", "--input", required=True, help="CSV containing psm_id, score, is_decoy")
+    p_fdr.add_argument("-o", "--output", required=True, help="Output annotated CSV")
+    p_fdr.add_argument("--alpha", type=float, default=0.01, help="Target FDR (default: 0.01)")
+
     args = parser.parse_args(argv)
+
+    if args.command == "fdr":
+        try:
+            from pathlib import Path
+            if Path(args.input).resolve() == Path(args.output).resolve():
+                raise ValueError("Input and output must be different files")
+            with open(args.input, newline="", encoding="utf-8-sig") as stream:
+                reader = csv.DictReader(stream)
+                if not reader.fieldnames or not {"psm_id", "score", "is_decoy"}.issubset(reader.fieldnames):
+                    raise ValueError("CSV headers must include psm_id, score, is_decoy")
+                rows = []
+                for index, row in enumerate(reader):
+                    if index >= 1000000:
+                        raise ValueError("Maximum 1,000,000 PSMs per calculation")
+                    rows.append(row)
+            analysis = analyze_psms(rows, alpha=args.alpha)
+            with open(args.output, "w", newline="", encoding="utf-8") as stream:
+                writer = csv.DictWriter(stream, fieldnames=["psm_id", "score", "is_decoy", "q_value", "accepted"])
+                writer.writeheader()
+                writer.writerows(analysis["results"])
+            print(f"PSMs={analysis['total_psms']} | targets={analysis['target_psms']} | decoys={analysis['decoy_psms']} | accepted={analysis['accepted_targets']} at alpha={analysis['alpha']}")
+            return 0
+        except (OSError, ValueError, csv.Error) as exc:
+            print(f"FDR analysis failed: {exc}", file=sys.stderr)
+            return 2
+
+    # Legacy alerting commands use the HMAC-signed audit security module.
+    from agents.base import validate_identifier, validate_file_path
+
 
     if args.command == "audit":
         # Validate identifiers before processing
@@ -91,7 +125,7 @@ def main(argv=None):
                 primary_metric=float(r.get("primary_metric", 15.0)),
                 secondary_metric=float(r.get("secondary_metric", 5.0)),
                 status_descriptor=r.get("status_descriptor", "NOMINAL"),
-                is_critical_flag=bool(r.get("is_critical_flag", False)),
+                is_critical_flag=str(r.get("is_critical_flag", "false")).strip().lower() in ("true", "1", "yes"),
             )
             dossier = coordinator.process(payload)
             row_dict = dict(r)
