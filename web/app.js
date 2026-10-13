@@ -77,7 +77,7 @@ function analyzePSMs(input, alpha) {
     if (seen.has(id)) throw new Error("Duplicate psm_id " + id + ": input must contain one winning match per spectrum.");
     seen.add(id);
     if (typeof raw.score !== "string" || !raw.score.trim()) throw new Error("Row " + (index + 2) + ": missing score.");
-    if (!/^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(raw.score.trim())) {
+    if (!/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(raw.score.trim())) {
       throw new Error("Row " + (index + 2) + ": score must be a decimal number.");
     }
     const score = Number(raw.score);
