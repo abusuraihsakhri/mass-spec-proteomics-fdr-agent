@@ -87,6 +87,20 @@ def validate_identifier(value: str, field_name: str = "identifier") -> str:
     return value
 
 
+
+
+def parse_flag(value: Any, field_name: str = "is_critical_flag") -> bool:
+    """Parse CSV boolean values explicitly (bool("False") is True)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        label = value.strip().lower()
+        if label in ("true", "1", "yes"):
+            return True
+        if label in ("false", "0", "no", ""):
+            return False
+    raise ValidationException(f"{field_name} must be true/false, 1/0, or yes/no")
+
 def validate_file_path(file_path: str, must_exist: bool = False) -> str:
     """Validate file path for safe filesystem operations.
 
