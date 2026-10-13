@@ -7,7 +7,7 @@ import json
 import sys
 from agents.models import SystemTaskPayload
 from agents.supervisor import SystemSupervisor
-from agents.base import AuditLogger, validate_identifier, validate_file_path, ValidationException
+from agents.base import AuditLogger, validate_identifier, validate_file_path, ValidationException, parse_flag
 
 supervisor = SystemSupervisor(model_provider="mock")
 
@@ -96,12 +96,12 @@ def main(argv=None):
         out_rows = []
         for r in rows:
             payload = SystemTaskPayload(
-                task_id=r.get("task_id", "TASK-01"),
-                target_identifier=r.get("target_identifier", "TARGET-01"),
+                task_id=validate_identifier(r.get("task_id", "TASK-01"), "task_id"),
+                target_identifier=validate_identifier(r.get("target_identifier", "TARGET-01"), "target_identifier"),
                 primary_metric=float(r.get("primary_metric", 15.0)),
                 secondary_metric=float(r.get("secondary_metric", 5.0)),
-                status_descriptor=r.get("status_descriptor", "NOMINAL"),
-                is_critical_flag=bool(r.get("is_critical_flag", False)),
+                status_descriptor=validate_identifier(r.get("status_descriptor", "NOMINAL"), "status_descriptor"),
+                is_critical_flag=parse_flag(r.get("is_critical_flag", "false")),
             )
             dossier = supervisor.process_task(payload)
             row_dict = dict(r)
