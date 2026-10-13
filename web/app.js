@@ -147,6 +147,7 @@ function exportResults() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+if (typeof document !== "undefined") {
 $("csvFile").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -185,3 +186,9 @@ $("analyze").addEventListener("click", () => {
   }
 });
 $("download").addEventListener("click", exportResults);
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { parseCSV, parseDecoy, analyzePSMs };
+}
+
