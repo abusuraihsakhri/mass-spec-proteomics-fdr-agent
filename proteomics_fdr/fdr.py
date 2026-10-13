@@ -52,7 +52,7 @@ def analyze_psms(rows: Iterable[Mapping], alpha: float = 0.01) -> dict:
             if isinstance(value, bool):
                 raise ValueError
             if isinstance(value, str) and not re.fullmatch(
-                    r"[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?",
+                    r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?",
                     value.strip()):
                 raise ValueError
             score = float(value)
