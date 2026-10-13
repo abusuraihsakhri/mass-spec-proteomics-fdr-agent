@@ -113,3 +113,17 @@ def test_hmac_rejects_modified_payload_hash():
     audit.log("worker", "agent", "DONE", {"result": "NOMINAL"})
     audit.logs[0]["payload_hash"] = "0" * 64
     assert not audit.verify_integrity()
+
+
+def test_audit_log_endpoint_requires_access_token(monkeypatch):
+    from fastapi import HTTPException
+    from agents.api import api_audit_logs
+    monkeypatch.delenv("AUDIT_LOG_READ_TOKEN", raising=False)
+    with pytest.raises(HTTPException) as blocked:
+        api_audit_logs("any-token")
+    assert blocked.value.status_code == 403
+    monkeypatch.setenv("AUDIT_LOG_READ_TOKEN", "research-test-token-123456")
+    with pytest.raises(HTTPException):
+        api_audit_logs("invalid-token")
+    result = api_audit_logs("research-test-token-123456")
+    assert result["verified"] is True
