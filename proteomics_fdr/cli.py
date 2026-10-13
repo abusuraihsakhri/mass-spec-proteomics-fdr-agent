@@ -72,7 +72,7 @@ def main(argv=None):
             return 2
 
     # Legacy alerting commands use the HMAC-signed audit security module.
-    from agents.base import validate_identifier, validate_file_path
+    from agents.base import validate_identifier, validate_file_path, parse_flag
 
 
     if args.command == "audit":
@@ -120,12 +120,12 @@ def main(argv=None):
         out_rows = []
         for r in rows:
             payload = FrontierPayload(
-                task_id=r.get("task_id", "TASK-01"),
-                target_identifier=r.get("target_identifier", "TARGET-01"),
+                task_id=validate_identifier(r.get("task_id", "TASK-01"), "task_id"),
+                target_identifier=validate_identifier(r.get("target_identifier", "TARGET-01"), "target_identifier"),
                 primary_metric=float(r.get("primary_metric", 15.0)),
                 secondary_metric=float(r.get("secondary_metric", 5.0)),
-                status_descriptor=r.get("status_descriptor", "NOMINAL"),
-                is_critical_flag=str(r.get("is_critical_flag", "false")).strip().lower() in ("true", "1", "yes"),
+                status_descriptor=validate_identifier(r.get("status_descriptor", "NOMINAL"), "status_descriptor"),
+                is_critical_flag=parse_flag(r.get("is_critical_flag", "false")),
             )
             dossier = coordinator.process(payload)
             row_dict = dict(r)
